@@ -1,6 +1,6 @@
 ###############################################
-# SymptomAtlas - AI-Powered Early Multi-Disease Detection
-# Fully deployable standalone Streamlit app (error-free)
+# SymptomAtlas - Fully working Streamlit app
+# No SHAP, fully compatible, production-grade
 ###############################################
 
 import streamlit as st
@@ -13,7 +13,6 @@ from sklearn.model_selection import train_test_split
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import classification_report
-import shap
 
 # Synthetic dataset generator
 def generate_synthetic_data(num_samples=1000, seed=42):
@@ -28,7 +27,6 @@ def generate_synthetic_data(num_samples=1000, seed=42):
     }
     df = pd.DataFrame(data)
 
-    # Create synthetic risk labels
     labels = []
     for i in range(num_samples):
         score = 0
@@ -53,7 +51,7 @@ def generate_synthetic_data(num_samples=1000, seed=42):
     df['risk_label'] = labels
     return df
 
-# Build ML model pipeline
+# Train model
 def train_model(data):
     features = ['sleep_hours', 'app_switch_freq', 'typing_speed', 'typing_errors', 'sentiment_score', 'speech_pauses']
     X = data[features]
@@ -68,12 +66,9 @@ def train_model(data):
     y_pred = model.predict(X_test)
     report = classification_report(y_test, y_pred)
 
-    explainer = shap.Explainer(model, X_train)
-    shap_values = explainer(X_train, check_additivity=False)  # ✅ FIXED LINE
+    return model, scaler, report, features, X_train
 
-    return model, scaler, report, explainer, shap_values, features, X_train
-
-# Streamlit UI starts here
+# Streamlit App UI
 st.set_page_config(page_title="SymptomAtlas AI", layout="wide")
 st.title("🧠 SymptomAtlas — AI-Powered Early Multi-Disease Detection")
 
@@ -86,7 +81,6 @@ Detect early risk signals for multiple diseases using behavioral data:
 - Speech pause patterns
 """)
 
-# Sidebar for data input
 st.sidebar.header("Data Input Options")
 data_source = st.sidebar.radio("Choose Dataset:", ["Use Synthetic Demo Data", "Upload Your Own CSV"])
 
@@ -104,19 +98,16 @@ else:
         st.warning("Please upload a CSV file.")
         st.stop()
 
-# Display data preview
 st.subheader("Dataset Preview")
 st.dataframe(data.head())
 
-# Train model
 st.subheader("Model Training")
 st.write("Training RandomForestClassifier on behavioral data...")
-model, scaler, report, explainer, shap_values, features, X_train = train_model(data)
+model, scaler, report, features, X_train = train_model(data)
 
 st.text("Classification Report:")
 st.code(report, language='text')
 
-# User prediction section
 st.subheader("Make Predictions on New Data")
 example_input = {}
 columns = ['sleep_hours', 'app_switch_freq', 'typing_speed', 'typing_errors', 'sentiment_score', 'speech_pauses']
@@ -137,7 +128,6 @@ if st.button("Predict Disease Risk"):
     st.subheader("Prediction Probabilities")
     st.write(class_probs)
 
-# Visualize behavioral drift
 st.subheader("Behavioral Drift Visualizations")
 fig, axs = plt.subplots(2, 3, figsize=(18, 10))
 for idx, feature in enumerate(columns):
@@ -146,11 +136,10 @@ for idx, feature in enumerate(columns):
     axs[row][col].set_title(feature)
 st.pyplot(fig)
 
-# SHAP Explainability Summary
-st.subheader("Explainable AI Insights (SHAP Values)")
-st.write("Global feature importance across training data:")
-shap.summary_plot(shap_values, features=features, plot_type="bar", show=False)
-st.pyplot(bbox_inches='tight')
+st.subheader("Global Feature Importance (from RandomForest)")
+importances = model.feature_importances_
+feat_importances = pd.Series(importances, index=features).sort_values(ascending=False)
+st.bar_chart(feat_importances)
 
 st.markdown("---")
 st.markdown("Project developed by **Lognath A.** 🚀 Fully deployable Streamlit AI app.")
