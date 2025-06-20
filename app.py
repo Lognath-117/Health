@@ -1,6 +1,6 @@
 ###############################################
 # SymptomAtlas - AI-Powered Early Multi-Disease Detection
-# Fully deployable standalone Streamlit app
+# Fully deployable standalone Streamlit app (error-free)
 ###############################################
 
 import streamlit as st
@@ -14,13 +14,6 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import classification_report
 import shap
-
-# Kaggle download function (optional)
-def download_kaggle_data():
-    # Placeholder for Kaggle download logic
-    # User needs kaggle.json properly configured
-    kaggle_dataset = "username/dataset-name"  # <-- Replace with real dataset if available
-    os.system(f"kaggle datasets download -d {kaggle_dataset} -p ./data --unzip")
 
 # Synthetic dataset generator
 def generate_synthetic_data(num_samples=1000, seed=42):
@@ -45,7 +38,7 @@ def generate_synthetic_data(num_samples=1000, seed=42):
         if df.loc[i, 'typing_errors'] > 5: score += 1
         if df.loc[i, 'sentiment_score'] < -1: score += 1
         if df.loc[i, 'speech_pauses'] > 8: score += 1
-        
+
         if score >= 5:
             labels.append("Neurodegenerative Risk")
         elif score >= 3:
@@ -56,7 +49,7 @@ def generate_synthetic_data(num_samples=1000, seed=42):
             labels.append("Depression")
         else:
             labels.append("Healthy")
-    
+
     df['risk_label'] = labels
     return df
 
@@ -71,14 +64,14 @@ def train_model(data):
     X_train, X_test, y_train, y_test = train_test_split(X_scaled, y, test_size=0.2, random_state=42)
     model = RandomForestClassifier(n_estimators=200, random_state=42)
     model.fit(X_train, y_train)
-    
+
     y_pred = model.predict(X_test)
     report = classification_report(y_test, y_pred)
-    
-    explainer = shap.Explainer(model, X_train)
-    shap_values = explainer(X_train)
 
-    return model, scaler, report, explainer, shap_values
+    explainer = shap.Explainer(model, X_train)
+    shap_values = explainer(X_train, check_additivity=False)  # ✅ FIXED LINE
+
+    return model, scaler, report, explainer, shap_values, features, X_train
 
 # Streamlit UI starts here
 st.set_page_config(page_title="SymptomAtlas AI", layout="wide")
@@ -118,7 +111,7 @@ st.dataframe(data.head())
 # Train model
 st.subheader("Model Training")
 st.write("Training RandomForestClassifier on behavioral data...")
-model, scaler, report, explainer, shap_values = train_model(data)
+model, scaler, report, explainer, shap_values, features, X_train = train_model(data)
 
 st.text("Classification Report:")
 st.code(report, language='text')
@@ -130,7 +123,7 @@ columns = ['sleep_hours', 'app_switch_freq', 'typing_speed', 'typing_errors', 's
 col1, col2, col3 = st.columns(3)
 
 for idx, col in enumerate(columns):
-    with [col1, col2, col3][idx%3]:
+    with [col1, col2, col3][idx % 3]:
         example_input[col] = st.number_input(f"{col}", value=float(data[col].mean()), step=0.1)
 
 if st.button("Predict Disease Risk"):
@@ -139,14 +132,14 @@ if st.button("Predict Disease Risk"):
     pred_class = model.predict(input_scaled)[0]
     pred_proba = model.predict_proba(input_scaled)
     class_probs = dict(zip(model.classes_, pred_proba[0]))
-    
+
     st.success(f"Predicted Risk: **{pred_class}**")
     st.subheader("Prediction Probabilities")
     st.write(class_probs)
 
 # Visualize behavioral drift
 st.subheader("Behavioral Drift Visualizations")
-fig, axs = plt.subplots(2, 3, figsize=(18,10))
+fig, axs = plt.subplots(2, 3, figsize=(18, 10))
 for idx, feature in enumerate(columns):
     row, col = divmod(idx, 3)
     sns.lineplot(data=data[feature], ax=axs[row][col])
@@ -156,7 +149,7 @@ st.pyplot(fig)
 # SHAP Explainability Summary
 st.subheader("Explainable AI Insights (SHAP Values)")
 st.write("Global feature importance across training data:")
-shap.summary_plot(shap_values, plot_type="bar", show=False)
+shap.summary_plot(shap_values, features=features, plot_type="bar", show=False)
 st.pyplot(bbox_inches='tight')
 
 st.markdown("---")
